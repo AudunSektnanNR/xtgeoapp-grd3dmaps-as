@@ -2,7 +2,7 @@ from dataclasses import dataclass, fields
 import glob
 from typing import Dict, List, Literal, Optional, Tuple
 import numpy as np
-
+import os
 from ecl.eclfile import EclFile
 from ecl.grid import EclGrid
 import xtgeo
@@ -16,9 +16,6 @@ DEFAULT_WATER_MOLAR_MASS = 18.0
 TRESHOLD_SGAS = 1e-16
 TRESHOLD_AMFG = 1e-16
 CO2_MASS_PNAME = "CO2Mass"
-
-
-# NBNB-AS: From Subscript:
 
 @dataclass
 class SourceData:
@@ -274,15 +271,12 @@ def _extract_source_data(
         init_file: Optional[str] = None,
         zone_file: Optional[str] = None
 ) -> SourceData:
-    print("Start extracting source data")
     grid = EclGrid(grid_file)
     unrst = EclFile(unrst_file)
     init = EclFile(init_file)
     properties, dates = _fetch_properties(unrst, properties_to_extract)
-    print("Done fetching properties")
-
+    
     active = np.where(grid.export_actnum().numpy_copy() > 0)[0]
-    print("Number of active grid cells: " + str(len(active)))
     if _is_subset(["SGAS", "AMFG"], list(properties.keys())):
         gasless = _identify_gas_less_cells(properties["SGAS"], properties["AMFG"])
     elif _is_subset(["SGAS", "XMF2"], list(properties.keys())):
@@ -412,9 +406,7 @@ def generate_co2_mass_data(
     co2_molar_mass: float = DEFAULT_CO2_MOLAR_MASS,
     water_molar_mass: float = DEFAULT_WATER_MOLAR_MASS
 ) -> Co2Data:
-    print(source_data.DATES)
-    print(source_data.zone)  # No zone yet
-
+    
     props_check = [
         x.name
         for x in fields(source_data)
@@ -462,11 +454,10 @@ def translate_co2data_to_property(
     grid_file: str,
     unrst_file: str,
     properties_to_extract: List[str],
-    out_file: str
-) -> List[xtgeo.GridProperty]:
-    print("translate_co2data_to_property")
+    out_file: str,
+    maps: List[str]
+) -> List[List[xtgeo.GridProperty]]:
 
-    #Not-so-nice block
     grid = EclGrid(grid_file)
     grid_pf = xtgeo.grid_from_file(grid_file)
     unrst = EclFile(unrst_file)
@@ -494,44 +485,77 @@ def translate_co2data_to_property(
         triplets.append(triplet)
 
     triplets = [(int(x-1), int(y-1), int(z-1)) for x, y, z in triplets]
-
     mask = np.ones((grid_pf.ncol,grid_pf.nrow,grid_pf.nlay),dtype=bool)
 
     for x in triplets:
         mask[x] = False
 
-    mask_date_prop_list = []
+    mass_total_prop_list = []
+    mass_aqu_phase_prop_list = []
+    mass_gas_phase_prop_list = []
+    out_list = []
+    all_maps_bool = False
     for x in co2_data.data_list:
-        print(f"date = {x.date}")
-        mass = x.total_mass()
-        gdf['mass'] = mass
-        mass_array = np.zeros((grid_pf.ncol,grid_pf.nrow,grid_pf.nlay))
-        for i in range(len(triplets)):
-            mass_array[triplets[i]]=mass[i]
-        
-        ## -999 or 0 for cells without CO2?
-        #result_array = np.ma.masked_array(mass_array, mask=mask)
-        result_array = mass_array
-        name = "mass--"+str(x.date)
-        test_prop = xtgeo.grid3d.GridProperty(ncol=grid_pf.ncol,nrow=grid_pf.nrow,nlay=grid_pf.nlay,values=result_array,name=name,date=str(x.date))
-        test_prop.to_file(out_file + "MASS_"+str(x.date)+".roff", fformat="roff")
-        mask_date_prop_list.append(test_prop)#Sure?
+        mass_total = x.total_mass()
+        mass_aqu_phase = x.aqu_phase
+        mass_gas_phase = x.gas_phase
 
-        print("")
-        print(type(mass))
-        print(f"sum of co2 mass: {mass.sum()}")
-        print(len(mass))
-        # a = xtgeo.GridProperty(values=mass)
-    return mask_date_prop_list
+        gdf['mass_total'] = mass_total
+        gdf['mass_aqu_phase'] = mass_aqu_phase
+        gdf['mass_gas_phase'] = mass_gas_phase
+
+        mass_total_array = np.zeros((grid_pf.ncol,grid_pf.nrow,grid_pf.nlay))
+        mass_aqu_phase_array = np.zeros((grid_pf.ncol,grid_pf.nrow,grid_pf.nlay))
+        mass_gas_phase_array = np.zeros((grid_pf.ncol,grid_pf.nrow,grid_pf.nlay))
+
+        for i in range(len(triplets)):
+            mass_total_array[triplets[i]]=mass_total[i]
+            mass_aqu_phase_array[triplets[i]]=mass_aqu_phase[i]
+            mass_gas_phase_array[triplets[i]]=mass_gas_phase[i]
+
+        ## Setting up the grid folder to store the gridproperties
+        grid_out_dir = out_file+"/grid"
+        if not os.path.exists(grid_out_dir):
+            os.makedirs(grid_out_dir)
+        mass_total_name = "co2_mass_total--"+str(x.date)
+        mass_total_prop = xtgeo.grid3d.GridProperty(ncol=grid_pf.ncol,nrow=grid_pf.nrow,nlay=grid_pf.nlay,values=mass_total_array,name=mass_total_name,date=str(x.date))
+
+        mass_aqu_phase_name = "co2_mass_aqu_phase--"+str(x.date)
+        mass_aqu_phase_prop = xtgeo.grid3d.GridProperty(ncol=grid_pf.ncol,nrow=grid_pf.nrow,nlay=grid_pf.nlay,values=mass_aqu_phase_array,name=mass_aqu_phase_name,date=str(x.date))
+
+        mass_gas_phase_name = "co2_mass_gas_phase--"+str(x.date)
+        mass_gas_phase_prop = xtgeo.grid3d.GridProperty(ncol=grid_pf.ncol,nrow=grid_pf.nrow,nlay=grid_pf.nlay,values=mass_gas_phase_array,name=mass_gas_phase_name,date=str(x.date))
+
+        if maps is None:
+            maps = []
+        elif isinstance(maps,str):
+            maps = [maps]
+        maps = [map_name.lower() for map_name in maps]
+        
+        if "all" in maps or len(maps)==0:
+            mass_total_prop.to_file(grid_out_dir + "/MASS_TOTAL_"+str(x.date)+".roff", fformat="roff")
+            mass_aqu_phase_prop.to_file(grid_out_dir + "/MASS_AQU_PHASE_"+str(x.date)+".roff", fformat="roff")
+            mass_gas_phase_prop.to_file(grid_out_dir + "/MASS_GAS_PHASE_"+str(x.date)+".roff", fformat="roff")
+            mass_total_prop_list.append(mass_total_prop)
+            mass_aqu_phase_prop_list.append(mass_aqu_phase_prop)
+            mass_gas_phase_prop_list.append(mass_gas_phase_prop)
+            all_maps_bool = True
+        if "free_co2" in maps and all_maps_bool==False:
+            mass_gas_phase_prop.to_file(grid_out_dir + "/MASS_GAS_PHASE_"+str(x.date)+".roff", fformat="roff")
+            mass_gas_phase_prop_list.append(mass_gas_phase_prop)
+        if "dissolved_co2" in maps and all_maps_bool==False:
+            mass_aqu_phase_prop.to_file(grid_out_dir + "/MASS_AQU_PHASE_"+str(x.date)+".roff", fformat="roff")
+            mass_aqu_phase_prop_list.append(mass_aqu_phase_prop)
+        if "total_co2" in maps and all_maps_bool==False:
+            mass_total_prop.to_file(grid_out_dir + "/MASS_TOTAL_"+str(x.date)+".roff", fformat="roff")
+            mass_total_prop_list.append(mass_total_prop)
+
+    out_list = [mass_gas_phase_prop_list,mass_aqu_phase_prop_list,mass_total_prop_list]
+    return out_list
 
 def _temp_make_property_copy(source: str, grid_file: Optional[str], dates: List[str]) -> xtgeo.GridProperty:
-    # Calculate sgas_prop:
     try:
         grid = None if grid_file is None else xtgeo.grid_from_file(grid_file)
-        
-        # props = xtgeo.gridproperty_from_file(
-        #     source, names="SGAS", grid=grid, dates=dates or "all",
-        # ).props
         props = xtgeo.gridproperties_from_file(
             source, grid=grid,
         )
@@ -539,6 +563,3 @@ def _temp_make_property_copy(source: str, grid_file: Optional[str], dates: List[
     except (RuntimeError, ValueError):
         print("ERROR")
         exit()
-        # props = [xtgeo.gridproperty_from_file(source, name="SGAS")]
-
-    # return sgas_prop.copy(newname="co2_mass")
