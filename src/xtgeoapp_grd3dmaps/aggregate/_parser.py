@@ -8,7 +8,6 @@ import numpy as np
 import xtgeo
 import yaml
 
-from xtgeoapp_grd3dmaps.aggregate import _config
 from xtgeoapp_grd3dmaps.aggregate._config import (
     CO2MassSettings,
     ComputeSettings,
@@ -227,7 +226,7 @@ def _zonation_from_zproperty(
         if "zranges" not in zfile:
             error_text = "The yaml zone file must be in the format:\nzranges:\
             \n    - Zone1: [1, 5]\n    - Zone2: [6, 10]\n    - Zone3: [11, 14])"
-            raise Exception(error_text)
+            raise ValueError(error_text)
         zranges = zfile["zranges"]
         return _zonation_from_zranges(grid, zranges)
     actnum = grid.actnum_indices
@@ -250,7 +249,7 @@ def _zonation_from_zproperty(
 
 
 def create_map_template(
-    map_settings: _config.MapSettings,
+    map_settings: MapSettings,
 ) -> Union[xtgeo.RegularSurface, float]:
     """
     Creates the map template to use based on the provided settings. May instead return a
@@ -263,14 +262,14 @@ def create_map_template(
             raise NotImplementedError("Rotated surfaces are not handled correctly yet")
         return surf
     if map_settings.xori is not None:
-        surf_kwargs = dict(
-            ncol=map_settings.ncol,
-            nrow=map_settings.nrow,
-            xinc=map_settings.xinc,
-            yinc=map_settings.yinc,
-            xori=map_settings.xori,
-            yori=map_settings.yori,
-        )
+        surf_kwargs = {
+            "ncol": map_settings.ncol,
+            "nrow": map_settings.nrow,
+            "xinc": map_settings.xinc,
+            "yinc": map_settings.yinc,
+            "xori": map_settings.xori,
+            "yori": map_settings.yori,
+        }
         if not all((s is not None for s in surf_kwargs.values())):
             missing = [k for k, v in surf_kwargs.items() if v is None]
             raise ValueError(

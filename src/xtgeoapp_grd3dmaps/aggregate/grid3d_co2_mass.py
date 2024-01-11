@@ -4,15 +4,21 @@ import sys
 import tempfile
 
 import xtgeo
-from _co2_mass import extract_source_data
 
-from xtgeoapp_grd3dmaps.aggregate import (
-    _co2_mass,
-    _config,
-    _parser,
-    grid3d_aggregate_map,
+from xtgeoapp_grd3dmaps.aggregate._co2_mass import (
+    extract_source_data,
+    generate_co2_mass_data,
+    translate_co2data_to_property,
 )
-from xtgeoapp_grd3dmaps.aggregate._config import CO2MassSettings
+from xtgeoapp_grd3dmaps.aggregate._config import (
+    AggregationMethod,
+    CO2MassSettings,
+    Output,
+    Property,
+    RootConfig,
+)
+from xtgeoapp_grd3dmaps.aggregate._parser import process_arguments
+from xtgeoapp_grd3dmaps.aggregate.grid3d_aggregate_map import generate_from_config
 
 PROPERTIES_TO_EXTRACT = [
     "RPORV",
@@ -45,7 +51,7 @@ PROPERTIES_TO_EXTRACT = [
 def calculate_mass_property(
     grid_file: str,
     co2_mass_settings: CO2MassSettings,
-    out_folder: _config.Output,
+    out_folder: Output,
 ):
     """
     Calculates a 3D CO2 mass property from the provided grid and grid property
@@ -59,9 +65,9 @@ def calculate_mass_property(
         None,
     )
 
-    co2_data = _co2_mass.generate_co2_mass_data(source_data)
+    co2_data = generate_co2_mass_data(source_data)
 
-    out_property_list = _co2_mass.translate_co2data_to_property(
+    out_property_list = translate_co2data_to_property(
         co2_data,
         grid_file,
         co2_mass_settings,
@@ -72,21 +78,21 @@ def calculate_mass_property(
 
 
 def co2_mass_property_to_map(
-    config_: _config.RootConfig,
+    config_: RootConfig,
     t_prop: xtgeo.GridProperty,
 ):
     """
-    Aggregates and writes a migration time property to file using `grid3d_aggragte_map`.
-    The migration time property is written to a temporary file while performing the
+    Aggregates and writes mass properties to file using `grid3d_aggragte_map`.
+    The mass properties are written to temporary files while performing the
     aggregation.
     """
     config_.input.properties = []
-    config_.computesettings.aggregation = _config.AggregationMethod.SUM
+    config_.computesettings.aggregation = AggregationMethod.SUM
     config_.output.aggregation_tag = False
     _, temp_path = tempfile.mkstemp()
-    config_.input.properties.append(_config.Property(temp_path, t_prop.name, None))
+    config_.input.properties.append(Property(temp_path, t_prop.name, None))
     t_prop.to_file(temp_path)
-    grid3d_aggregate_map.generate_from_config(config_)
+    generate_from_config(config_)
     os.unlink(temp_path)
 
 
@@ -96,7 +102,7 @@ def main(arguments=None):
     """
     if arguments is None:
         arguments = sys.argv[1:]
-    config_ = _parser.process_arguments(arguments)
+    config_ = process_arguments(arguments)
     if config_.input.properties:
         raise ValueError("CO2 mass computation does not take a property as input")
     if config_.co2_mass_settings is None:

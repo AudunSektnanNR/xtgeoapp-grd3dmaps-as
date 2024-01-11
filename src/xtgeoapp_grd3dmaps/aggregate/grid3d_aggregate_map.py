@@ -12,16 +12,16 @@ from xtgeoapp_grd3dmaps.aggregate._config import (
     Input,
     MapSettings,
     Output,
+    RootConfig,
     Zonation,
 )
+from xtgeoapp_grd3dmaps.aggregate._grid_aggregation import aggregate_maps
 from xtgeoapp_grd3dmaps.aggregate._parser import (
     create_map_template,
     extract_properties,
     extract_zonations,
     process_arguments,
 )
-
-from . import _config, _grid_aggregation
 
 _XTG = XTGeoDialog()
 
@@ -104,7 +104,7 @@ def generate_maps(
     if computesettings.zone:
         _filters += extract_zonations(zonation, grid)
     _XTG.say("Generating Property Maps")
-    xn, yn, p_maps = _grid_aggregation.aggregate_maps(
+    xn, yn, p_maps = aggregate_maps(
         create_map_template(map_settings),
         grid,
         properties,
@@ -180,7 +180,7 @@ def _write_surfaces(
                 write_plot_using_quickplot(surface, pn)
 
 
-def generate_from_config(config: _config.RootConfig):
+def generate_from_config(config: RootConfig):
     """
     Wrapper around `generate_maps` based on a configuration object (RootConfig)
     """

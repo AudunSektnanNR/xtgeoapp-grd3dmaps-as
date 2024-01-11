@@ -6,12 +6,12 @@ from typing import List, Optional
 
 import xtgeo
 
-from xtgeoapp_grd3dmaps.aggregate import (
-    _config,
-    _migration_time,
-    _parser,
-    grid3d_aggregate_map,
+from xtgeoapp_grd3dmaps.aggregate._config import AggregationMethod, Property, RootConfig
+from xtgeoapp_grd3dmaps.aggregate._migration_time import (
+    generate_migration_time_property,
 )
+from xtgeoapp_grd3dmaps.aggregate._parser import extract_properties, process_arguments
+from xtgeoapp_grd3dmaps.aggregate.grid3d_aggregate_map import generate_from_config
 
 # Module variables for ERT hook implementation:
 DESCRIPTION = (
@@ -38,19 +38,17 @@ def calculate_migration_time_property(
     files
     """
     prop_spec = [
-        _config.Property(source=f, name=property_name)
+        Property(source=f, name=property_name)
         for f in glob.glob(properties_files, recursive=True)
     ]
     grid = None if grid_file is None else xtgeo.grid_from_file(grid_file)
-    properties = _parser.extract_properties(prop_spec, grid, dates)
-    t_prop = _migration_time.generate_migration_time_property(
-        properties, lower_threshold
-    )
+    properties = extract_properties(prop_spec, grid, dates)
+    t_prop = generate_migration_time_property(properties, lower_threshold)
     return t_prop
 
 
 def migration_time_property_to_map(
-    config_: _config.RootConfig,
+    config_: RootConfig,
     t_prop: xtgeo.GridProperty,
 ):
     """
@@ -58,14 +56,14 @@ def migration_time_property_to_map(
     The migration time property is written to a temporary file while performing the
     aggregation.
     """
-    config_.computesettings.aggregation = _config.AggregationMethod.MIN
+    config_.computesettings.aggregation = AggregationMethod.MIN
     config_.output.aggregation_tag = False
     temp_file, temp_path = tempfile.mkstemp()
     os.close(temp_file)
     if config_.input.properties is not None:
-        config_.input.properties.append(_config.Property(temp_path, None, None))
+        config_.input.properties.append(Property(temp_path, None, None))
     t_prop.to_file(temp_path)
-    grid3d_aggregate_map.generate_from_config(config_)
+    generate_from_config(config_)
     os.unlink(temp_path)
 
 
@@ -75,7 +73,7 @@ def main(arguments=None):
     """
     if arguments is None:
         arguments = sys.argv[1:]
-    config_ = _parser.process_arguments(arguments)
+    config_ = process_arguments(arguments)
     if len(config_.input.properties) > 1:
         raise ValueError(
             "Migration time computation is only supported for a single property"
