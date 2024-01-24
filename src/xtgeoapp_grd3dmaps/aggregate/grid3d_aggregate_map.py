@@ -1,6 +1,6 @@
 import pathlib
 import sys
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import xtgeo
@@ -132,6 +132,7 @@ def _property_tag(prop: str, agg_method: AggregationMethod, agg_tag: bool):
     return f"{agg}{prop.replace('_', '--')}"
 
 
+# pylint: disable=too-many-arguments
 def _ndarray_to_regsurfs(
     filter_names: List[str],
     prop_names: List[str],
@@ -166,7 +167,7 @@ def _deduce_surface_name(filter_name, property_name, lowercase):
 def _write_surfaces(
     surfaces: List[xtgeo.RegularSurface],
     map_folder: str,
-    plot_folder: str,
+    plot_folder: Optional[str],
     use_plotly: bool,
 ):
     for surface in surfaces:

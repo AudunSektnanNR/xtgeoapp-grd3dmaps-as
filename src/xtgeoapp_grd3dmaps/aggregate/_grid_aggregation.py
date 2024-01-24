@@ -1,6 +1,6 @@
 import dataclasses
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 import scipy.interpolate
@@ -262,7 +262,7 @@ def _properties_to_maps(
     method: AggregationMethod,
     conn_data: _ConnectionData,
 ):
-    results = []
+    results: List[Any] = []
     for incl in inclusion_filters:
         map_ix = conn_data.node_indices
         grd_ix = conn_data.grid_indices
@@ -299,7 +299,8 @@ def _property_to_map(
     assert weights is None or weights.shape == prop.shape
     if weights is not None:
         assert method in [AggregationMethod.MEAN, AggregationMethod.SUM]
-    data = prop[cols]
+    data = prop[0][cols] if len(prop) == 1 else prop[cols]
+    # Small hack due to a small difference between calculating mass and other properties
     weights = np.ones_like(data) if weights is None else weights[cols]
     if data.mask.any():
         invalid = data.mask
